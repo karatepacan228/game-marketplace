@@ -1,8 +1,10 @@
+
 package com.example.demo.service;
 
 import com.example.demo.entity.Item;
 import com.example.demo.entity.Order;
 import com.example.demo.entity.OrderStatus;
+import com.example.demo.entity.Role;
 import com.example.demo.entity.User;
 import com.example.demo.repository.ItemRepository;
 import com.example.demo.repository.OrderRepository;
@@ -146,7 +148,7 @@ public class OrderService {
         return orderRepository.save(order);
     }
 
-    // Отмена заказа
+    // Отмена заказа покупателем или продавцом
     @Transactional
     public Order cancelOrder(Long orderId, Long userId) {
 
@@ -174,6 +176,61 @@ public class OrderService {
 
         itemRepository.save(item);
 
+        order.setStatus(OrderStatus.CANCELLED);
+
+        return orderRepository.save(order);
+    }
+
+    // Отмена заказа администратором
+    @Transactional
+    public Order cancelOrderByAdmin(Long orderId, Long adminId) {
+
+        // Находим администратора
+        User admin = userRepository.findById(adminId)
+                .orElseThrow(() ->
+                        new IllegalArgumentException("Администратор не найден"));
+
+        // Проверяем роль администратора
+        if (admin.getRole() != Role.ADMIN) {
+            throw new IllegalStateException(
+                    "Только администратор может отменять заказы");
+        }
+
+        // Находим заказ
+        Order order = getOrderById(orderId);
+
+        // Проверяем, не отменён ли заказ
+        if (order.getStatus() == OrderStatus.CANCELLED) {
+            throw new IllegalStateException("Заказ уже отменён");
+        }
+
+        // Нельзя отменить доставленный заказ
+        if (order.getStatus() == OrderStatus.DELIVERED) {
+            throw new IllegalStateException(
+                    "Нельзя отменить уже доставленный заказ");
+        }
+
+        // Возвращаем деньги покупателю, если заказ был оплачен
+        if (order.getStatus() == OrderStatus.PAID
+                || order.getStatus() == OrderStatus.DISPUTE) {
+
+            User buyer = order.getBuyer();
+
+            buyer.setBalance(
+                    buyer.getBalance().add(order.getPrice())
+            );
+
+            userRepository.save(buyer);
+        }
+
+        // Возвращаем товар в каталог
+        Item item = order.getItem();
+
+        item.setAvailable(true);
+
+        itemRepository.save(item);
+
+        // Меняем статус заказа
         order.setStatus(OrderStatus.CANCELLED);
 
         return orderRepository.save(order);

@@ -1,5 +1,6 @@
 package com.example.demo.service;
 
+import com.example.demo.entity.Role;
 import com.example.demo.entity.Game;
 import com.example.demo.entity.Item;
 import com.example.demo.entity.User;
@@ -37,6 +38,14 @@ public class ItemService {
         User seller = userRepository.findById(sellerId)
                 .orElseThrow(() ->
                         new IllegalArgumentException("Продавец не найден"));
+
+        if (seller.getRole() != Role.USER) {
+    throw new IllegalArgumentException(
+            "Только обычный пользователь может создавать товары");
+}                
+if (title == null || title.isBlank()) {
+    throw new IllegalArgumentException("Название товара не может быть пустым");
+}
 
         Game game = gameRepository.findById(gameId)
                 .orElseThrow(() ->
@@ -113,16 +122,19 @@ public class ItemService {
     }
 
     // Удаление товара
-    @Transactional
-    public void deleteItem(Long itemId, Long sellerId) {
+   @Transactional
+public void deleteItem(Long itemId, Long sellerId) {
+    Item item = getItemById(itemId);
 
-        Item item = getItemById(itemId);
-
-        if (!item.getSeller().getId().equals(sellerId)) {
-            throw new IllegalStateException(
-                    "Вы не можете удалить чужой товар");
-        }
-
-        itemRepository.delete(item);
+    if (!item.getSeller().getId().equals(sellerId)) {
+        throw new IllegalStateException("Вы не можете удалить чужой товар");
     }
+
+    if (!item.isAvailable()) {
+        throw new IllegalStateException("Товар уже недоступен");
+    }
+
+    item.setAvailable(false);
+    itemRepository.save(item);
+}
 }

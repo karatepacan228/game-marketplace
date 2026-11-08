@@ -5,8 +5,10 @@ import com.example.demo.entity.Role;
 import com.example.demo.entity.User;
 import com.example.demo.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -16,6 +18,7 @@ import java.util.List;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
     // Регистрация нового пользователя
     @Transactional
@@ -33,8 +36,14 @@ public class UserService {
 
         user.setUsername(username);
         user.setEmail(email);
-        user.setPassword(password);
-        user.setRole(Role.BUYER);
+
+        // Хешируем пароль перед сохранением
+        user.setPassword(passwordEncoder.encode(password));
+
+        // Каждый новый пользователь получает роль USER
+        user.setRole(Role.USER);
+
+        // Начальный баланс пользователя
         user.setBalance(BigDecimal.ZERO);
 
         return userRepository.save(user);
@@ -62,35 +71,28 @@ public class UserService {
                         new IllegalArgumentException("Пользователь не найден"));
     }
 
-    // Пополнение баланса покупателя администратором
+    // Пополнение баланса пользователя администратором
     @Transactional
-    public User depositBalance(Long adminId, Long buyerId, BigDecimal amount) {
+    public User depositBalance(Long adminId, Long userId, BigDecimal amount) {
 
         // Проверяем администратора
         User admin = getUserById(adminId);
 
         if (admin.getRole() != Role.ADMIN) {
-            throw new IllegalArgumentException(
-                    "Недостаточно прав. Только администратор может пополнять баланс");
-        }
+           throw new AccessDeniedException("Недостаточно прав. Только администратор может пополнять баланс"); }
 
-        // Проверяем покупателя
-        User buyer = getUserById(buyerId);
+        // Находим пользователя
+        User user = getUserById(userId);
 
-        if (buyer.getRole() != Role.BUYER) {
-            throw new IllegalArgumentException(
-                    "Пополнять можно только баланс покупателя");
-        }
-
-        // Проверяем сумму
+        // Проверяем сумму пополнения
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException(
                     "Сумма пополнения должна быть больше нуля");
         }
 
-        // Увеличиваем баланс
-        buyer.setBalance(buyer.getBalance().add(amount));
+        // Увеличиваем баланс пользователя
+        user.setBalance(user.getBalance().add(amount));
 
-        return userRepository.save(buyer);
+        return userRepository.save(user);
     }
 }
